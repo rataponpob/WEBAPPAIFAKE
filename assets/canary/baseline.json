@@ -1,0 +1,16 @@
+{
+  "description": "Baseline reference values for canary regression testing",
+  "tolerance": 0.05,
+  "threshold": 0.55,
+  "class_index_fake": 0,
+  "canary_targets": {
+    "fake_sample.mp4": {
+      "expected_label": "fake",
+      "baseline_mean_prob_fake": 0.85
+    },
+    "real_sample.mp4": {
+      "expected_label": "real",
+      "baseline_mean_prob_fake": 0.15
+    }
+  }
+}
