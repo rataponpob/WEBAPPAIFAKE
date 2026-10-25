@@ -8,7 +8,14 @@ import streamlit as st
 
 from src.config import CONFIG
 from src.frame_extractor import extract_frames
-from src.model_loader import get_active_model_path, is_model_available, load_model
+from src.model_loader import (
+    download_model_from_url,
+    get_active_model_path,
+    get_available_models,
+    is_model_available,
+    load_model,
+    set_active_model_path,
+)
 from src.predictor import predict_video
 
 
@@ -29,13 +36,52 @@ def render_batch_page():
         "ระบบจะประมวลผลทีละไฟล์ พร้อมสรุปสถิติและดาวน์โหลดผลลัพธ์เป็น CSV"
     )
 
+    # ตรวจสอบและจัดการโมเดลในหน้านี้โดยตรง
+    available_models = get_available_models()
     model_path = get_active_model_path()
+    model_display_name = model_path.stem if model_path else "AI Model"
     model_ready = is_model_available(model_path)
 
-    if not model_ready:
-        st.warning(
-            f"⚠️ ยังไม่พบไฟล์โมเดลที่ `{model_path}` กรุณาวางไฟล์ `{model_path.name}` ก่อนเริ่มใช้งาน"
-        )
+    col_model_status, col_model_ctrl = st.columns([3, 1])
+    with col_model_status:
+        if model_ready:
+            file_mb = model_path.stat().st_size / (1024 * 1024)
+            st.markdown(
+                f"<div style='background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:6px 12px;font-size:0.86rem;margin-bottom:8px;'>"
+                f"🤖 โมเดลที่ใช้งาน: <b style='color:#059669;'>{model_path.name}</b> "
+                f"<span style='color:#6b7280;'>({file_mb:.1f} MB)</span> "
+                f"<span style='color:#10b981;font-weight:600;margin-left:8px;'>● พร้อมทำงาน</span></div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"<div style='background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:6px 12px;font-size:0.86rem;color:#dc2626;margin-bottom:8px;'>"
+                f"⚠️ ยังไม่พบไฟล์โมเดลในระบบ กรุณากดดาวน์โหลดโมเดลจาก GitHub Release</div>",
+                unsafe_allow_html=True,
+            )
+
+    with col_model_ctrl:
+        if not model_ready:
+            default_url = CONFIG.get("DEFAULT_MODEL_URL", "")
+            if st.button("📥 โหลดโมเดล GitHub Release", type="primary", use_container_width=True, key="btn_batch_dl_model"):
+                pbar = st.progress(0, text="กำลังเตรียมดาวน์โหลด...")
+                s_txt = st.empty()
+                with st.spinner("กำลังดาวน์โหลดโมเดล..."):
+                    ok, msg = download_model_from_url(default_url, progress_bar=pbar, status_text=s_txt)
+                    if ok:
+                        st.success(msg)
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+        elif len(available_models) > 1:
+            m_names = [m.name for m in available_models]
+            cur_idx = m_names.index(model_path.name) if model_path.name in m_names else 0
+            chosen = st.selectbox("สลับโมเดล:", options=m_names, index=cur_idx, key="batch_model_select")
+            ch_path = next((m for m in available_models if m.name == chosen), model_path)
+            if ch_path != model_path:
+                set_active_model_path(ch_path)
+                st.rerun()
 
     # แผงตั้งค่าการตรวจจับ (Inference Settings) แสดงให้เห็นชัดเจนทันที ไม่พับซ่อน
     st.markdown(
@@ -103,7 +149,7 @@ def render_batch_page():
                 true_lbl = guess_true_label(fname)
                 percent = int((idx / total_files) * 100)
                 progress_bar.progress(
-                    percent, text=f"[{idx+1}/{total_files}] กำลังวิเคราะห์: {fname}"
+                    percent, text=f"[{idx+1}/{total_files}] ⚡ กำลังวิเคราะห์ด้วย {model_display_name}: {fname}"
                 )
 
                 temp_path = None
@@ -122,6 +168,7 @@ def render_batch_page():
                         rows.append(
                             {
                                 "filename": fname,
+                                "model_name": model_display_name,
                                 "true_label": true_lbl,
                                 "predicted_label": "ERROR (อ่านเฟรมไม่ได้)",
                                 "mean_prob_fake": None,
@@ -141,6 +188,7 @@ def render_batch_page():
                         rows.append(
                             {
                                 "filename": fname,
+                                "model_name": model_display_name,
                                 "true_label": true_lbl,
                                 "predicted_label": res.label.upper(),
                                 "mean_prob_fake": round(res.mean_prob_fake, 4),
@@ -157,6 +205,7 @@ def render_batch_page():
                             {
                                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                                 "filename": fname,
+                                "model_name": model_display_name,
                                 "verdict": res.label.upper(),
                                 "mean_prob_fake": res.mean_prob_fake,
                                 "confidence": res.confidence_level,
@@ -171,6 +220,7 @@ def render_batch_page():
                     rows.append(
                         {
                             "filename": fname,
+                            "model_name": model_display_name,
                             "true_label": true_lbl,
                             "predicted_label": f"ERROR ({str(ex)[:30]})",
                             "mean_prob_fake": None,
@@ -186,16 +236,19 @@ def render_batch_page():
                         except Exception:
                             pass
 
-            progress_bar.progress(100, text="✅ วิเคราะห์ชุดวิดีโอเสร็จสมบูรณ์!")
+            progress_bar.progress(100, text=f"✅ วิเคราะห์ชุดวิดีโอด้วย {model_display_name} เสร็จสมบูรณ์!")
             gc.collect()
 
             df_results = pd.DataFrame(rows)
             st.session_state["latest_batch_df"] = df_results
+            st.session_state["latest_batch_model"] = model_display_name
 
         # แสดงตารางผลลัพธ์
         if "latest_batch_df" in st.session_state:
             df = st.session_state["latest_batch_df"]
+            used_m = st.session_state.get("latest_batch_model", model_display_name)
             st.subheader("📊 ผลลัพธ์การวิเคราะห์แบบกลุ่ม (Batch Results)")
+            st.caption(f"🤖 ประมวลผลด้วยโมเดล: **{used_m}** | สุ่มตรวจ: **{n_frames}** เฟรม | เกณฑ์ตัดสิน FAKE: **{vote_thresh:.2f}**")
 
             # ตัวชี้วัดสรุป
             n_total = len(df)
