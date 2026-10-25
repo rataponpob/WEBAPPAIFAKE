@@ -1,9 +1,12 @@
 import gc
+import json
 import os
 import tempfile
 import time
 from pathlib import Path
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from src.config import CONFIG
@@ -193,6 +196,7 @@ def render_batch_page():
                                 "predicted_label": res.label.upper(),
                                 "mean_prob_fake": round(res.mean_prob_fake, 4),
                                 "confidence": res.confidence_level,
+                                "borderline": res.borderline,
                                 "n_frames_used": res.n_frames_used,
                                 "elapsed_s": round(time.time() - t0, 2),
                             }
@@ -243,47 +247,175 @@ def render_batch_page():
             st.session_state["latest_batch_df"] = df_results
             st.session_state["latest_batch_model"] = model_display_name
 
-        # แสดงตารางผลลัพธ์
+        # แสดงผลลัพธ์การวิเคราะห์แบบกลุ่ม (Rich & Clean Batch Results)
         if "latest_batch_df" in st.session_state:
             df = st.session_state["latest_batch_df"]
             used_m = st.session_state.get("latest_batch_model", model_display_name)
-            st.subheader("📊 ผลลัพธ์การวิเคราะห์แบบกลุ่ม (Batch Results)")
-            st.caption(f"🤖 ประมวลผลด้วยโมเดล: **{used_m}** | สุ่มตรวจ: **{n_frames}** เฟรม | เกณฑ์ตัดสิน FAKE: **{vote_thresh:.2f}**")
 
-            # ตัวชี้วัดสรุป
+            st.divider()
+            st.subheader("📊 ผลลัพธ์การวิเคราะห์แบบกลุ่ม (Batch Results)")
+            st.caption(
+                f"🤖 โมเดลที่ใช้: **{used_m}** • สุ่มตรวจ: **{n_frames}** เฟรม/คลิป • เกณฑ์ตัดสิน FAKE: **{vote_thresh:.2f}**"
+            )
+
+            # 1. กล่องสรุปสถิติภาพรวม (KPI Cards)
             n_total = len(df)
             n_fake = sum(df["predicted_label"] == "FAKE")
             n_real = sum(df["predicted_label"] == "REAL")
-            n_err = n_total - (n_fake + n_real)
+            n_err = sum(df["predicted_label"].str.startswith("ERROR", na=False))
+            n_border = sum(df.get("borderline", [False] * n_total))
+            total_time = sum(df.get("elapsed_s", [0] * n_total))
 
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("ทั้งหมด (Total)", f"{n_total} ไฟล์")
-            col2.metric("ทายว่า FAKE", f"{n_fake} ไฟล์", f"{(n_fake/n_total):.1%}")
-            col3.metric("ทายว่า REAL", f"{n_real} ไฟล์", f"{(n_real/n_total):.1%}")
-            col4.metric("ข้อผิดพลาด (Errors)", f"{n_err} ไฟล์")
+            kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
+            kpi1.metric("📁 ทั้งหมด", f"{n_total} ไฟล์")
+            kpi2.metric(
+                "🔴 ตรวจพบ FAKE (AI)",
+                f"{n_fake} ไฟล์",
+                f"{(n_fake/n_total*100):.1f}%" if n_total > 0 else "0%",
+            )
+            kpi3.metric(
+                "🟢 ตรวจพบ REAL (จริง)",
+                f"{n_real} ไฟล์",
+                f"{(n_real/n_total*100):.1f}%" if n_total > 0 else "0%",
+            )
+            kpi4.metric("⚠️ ก้ำกึ่ง (Borderline)", f"{n_border} ไฟล์")
+            kpi5.metric("⏱️ เวลารวม", f"{total_time:.1f} วินาที")
 
-            # ตาราง Dataframe
+            # 2. กราฟภาพรวม (Visual Insights)
+            c_chart1, c_chart2 = st.columns([1, 1], gap="medium")
+            with c_chart1:
+                labels = ["FAKE (AI)", "REAL (จริง)"]
+                values = [n_fake, n_real]
+                colors = ["#EF4444", "#10B981"]
+                if n_err > 0:
+                    labels.append("Error")
+                    values.append(n_err)
+                    colors.append("#94A3B8")
+
+                fig_donut = go.Figure(
+                    data=[
+                        go.Pie(
+                            labels=labels,
+                            values=values,
+                            hole=0.55,
+                            marker_colors=colors,
+                            textinfo="label+percent",
+                            hoverinfo="label+value+percent",
+                        )
+                    ]
+                )
+                fig_donut.update_layout(
+                    title="สัดส่วนผลวิเคราะห์ (FAKE vs REAL)",
+                    margin=dict(l=10, r=10, t=35, b=10),
+                    height=270,
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_donut, use_container_width=True)
+
+            with c_chart2:
+                valid_df = df[df["mean_prob_fake"].notna()].sort_values("mean_prob_fake", ascending=True)
+                if not valid_df.empty:
+                    bar_colors = [
+                        "#EF4444" if p >= vote_thresh else "#10B981"
+                        for p in valid_df["mean_prob_fake"]
+                    ]
+                    short_names = [
+                        name[:22] + "..." if len(name) > 25 else name
+                        for name in valid_df["filename"]
+                    ]
+                    fig_bar = go.Figure()
+                    fig_bar.add_trace(
+                        go.Bar(
+                            y=short_names,
+                            x=[p * 100 for p in valid_df["mean_prob_fake"]],
+                            orientation="h",
+                            marker_color=bar_colors,
+                            text=[f"{p*100:.1f}%" for p in valid_df["mean_prob_fake"]],
+                            textposition="auto",
+                            hovertemplate="<b>%{y}</b><br>AI Prob: %{x:.1f}%<extra></extra>",
+                        )
+                    )
+                    fig_bar.add_vline(
+                        x=vote_thresh * 100,
+                        line_dash="dash",
+                        line_color="#F59E0B",
+                        annotation_text=f"เกณฑ์ ({vote_thresh*100:.0f}%)",
+                        annotation_position="top right",
+                    )
+                    fig_bar.update_layout(
+                        title="อันดับคะแนน AI Probability (% ยิ่งสูงยิ่งเป็น AI)",
+                        xaxis_title="AI Probability (%)",
+                        xaxis=dict(range=[0, 105]),
+                        margin=dict(l=10, r=10, t=35, b=10),
+                        height=max(270, len(valid_df) * 36),
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+            # 3. ตารางแสดงผลลัพธ์แบบจัดรูปแบบอ่านง่าย (Formatted Table)
+            st.markdown("##### 📋 ตารางสรุปรายละเอียดรายไฟล์")
+
+            col_filter, col_search = st.columns([2, 3])
+            with col_filter:
+                filter_choice = st.selectbox(
+                    "กรองแสดงผลลัพธ์:",
+                    options=[
+                        "ทั้งหมด (All)",
+                        "🔴 เฉพาะ FAKE (AI)",
+                        "🟢 เฉพาะ REAL (จริง)",
+                        "⚠️ เฉพาะ ก้ำกึ่ง (Borderline)",
+                    ],
+                    key="batch_filter_choice",
+                )
+            with col_search:
+                search_query = st.text_input(
+                    "🔍 ค้นหาชื่อไฟล์:",
+                    placeholder="พิมพ์ชื่อไฟล์ที่ต้องการค้นหา...",
+                    key="batch_search_query",
+                )
+
+            display_df = df.copy()
+            if filter_choice == "🔴 เฉพาะ FAKE (AI)":
+                display_df = display_df[display_df["predicted_label"] == "FAKE"]
+            elif filter_choice == "🟢 เฉพาะ REAL (จริง)":
+                display_df = display_df[display_df["predicted_label"] == "REAL"]
+            elif filter_choice == "⚠️ เฉพาะ ก้ำกึ่ง (Borderline)":
+                display_df = display_df[display_df.get("borderline", False) == True]
+
+            if search_query.strip():
+                display_df = display_df[
+                    display_df["filename"].str.contains(search_query.strip(), case=False, na=False)
+                ]
+
+            view_table = pd.DataFrame()
+            view_table["📁 ไฟล์วิดีโอ"] = display_df["filename"]
+            view_table["🎯 ผลการตรวจ"] = display_df["predicted_label"].apply(
+                lambda x: "🔴 FAKE (AI)" if x == "FAKE" else ("🟢 REAL (จริง)" if x == "REAL" else f"⚠️ {x}")
+            )
+            view_table["📊 ความน่าจะเป็น AI"] = display_df["mean_prob_fake"].apply(
+                lambda x: f"{x*100:.1f}%" if pd.notna(x) else "-"
+            )
+            view_table["🛡️ ความมั่นใจ"] = display_df["confidence"]
+            view_table["🎞️ เฟรม"] = display_df["n_frames_used"].apply(lambda x: f"{x} เฟรม")
+            view_table["⏱️ เวลา"] = display_df["elapsed_s"].apply(lambda x: f"{x:.2f} วินาที")
+
+            if "true_label" in display_df.columns and display_df["true_label"].notna().any():
+                view_table["🏷️ ป้ายกำกับจริง"] = display_df["true_label"].apply(
+                    lambda x: str(x).upper() if pd.notna(x) else "-"
+                )
+
             st.dataframe(
-                df.style.map(
-                    lambda v: "background-color: #FEE2E2; font-weight: bold;"
-                    if v == "FAKE"
-                    else (
-                        "background-color: #DCFCE7; font-weight: bold;"
-                        if v == "REAL"
-                        else ""
-                    ),
-                    subset=["predicted_label"],
-                ),
+                view_table,
                 use_container_width=True,
+                hide_index=True,
             )
 
-            # ประเมินผลหากมี true_label
+            # 4. ประเมินผล Ground Truth & Confusion Matrix (ถ้ามีข้อมูลในชื่อไฟล์)
             labeled = df[
                 df["true_label"].notna()
                 & df["predicted_label"].isin(["FAKE", "REAL"])
             ]
             if not labeled.empty:
-                st.subheader("🎯 การประเมินผลเทียบกับ Ground Truth ในชื่อไฟล์")
+                st.markdown("##### 🎯 การประเมินผลเทียบกับ Ground Truth ในชื่อไฟล์")
                 y_true = labeled["true_label"].str.upper()
                 y_pred = labeled["predicted_label"]
 
@@ -293,32 +425,54 @@ def render_batch_page():
                 fn = sum((y_true == "FAKE") & (y_pred == "REAL"))
                 total_eval = tp + tn + fp + fn
                 acc = (tp + tn) / total_eval if total_eval > 0 else 0
+                prec = (tp / (tp + fp)) if (tp + fp) > 0 else 0
+                recall_fake = (tp / (tp + fn)) if (tp + fn) > 0 else 0
+                recall_real = (tn / (tn + fp)) if (tn + fp) > 0 else 0
 
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Accuracy", f"{acc:.1%}", f"{tp+tn}/{total_eval}")
-                c2.metric(
-                    "FAKE Recall",
-                    f"{(tp / (tp + fn)):.1%}" if (tp + fn) > 0 else "N/A",
-                )
-                c3.metric(
-                    "REAL Recall",
-                    f"{(tn / (tn + fp)):.1%}" if (tn + fp) > 0 else "N/A",
-                )
+                c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+                c_m1.metric("🎯 ความแม่นยำ (Accuracy)", f"{acc:.1%}", f"{tp+tn}/{total_eval} ไฟล์")
+                c_m2.metric("🎯 FAKE Precision", f"{prec:.1%}")
+                c_m3.metric("🔴 FAKE Recall (ตรวจจับ AI)", f"{recall_fake:.1%}")
+                c_m4.metric("🟢 REAL Recall (ตรวจจับของจริง)", f"{recall_real:.1%}")
 
                 st.markdown(
                     f"""
-| | Predicted REAL | Predicted FAKE |
-|---|---|---|
-| **Actual REAL** | {tn} | {fp} |
-| **Actual FAKE** | {fn} | {tp} |
-                    """
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:10px; padding:14px; margin-top:8px; margin-bottom:12px;">
+                        <div style="font-weight:600; margin-bottom:8px; font-size:0.92rem; color:#334155;">ตาราง Confusion Matrix:</div>
+                        <div style="display:grid; grid-template-columns: 140px 1fr 1fr; gap:8px; text-align:center; font-size:0.88rem;">
+                            <div style="font-weight:bold; background:#E2E8F0; padding:8px; border-radius:6px;">จริง \\ ทาย</div>
+                            <div style="font-weight:bold; background:#E0F2FE; color:#0369A1; padding:8px; border-radius:6px;">ทายว่า REAL (จริง)</div>
+                            <div style="font-weight:bold; background:#FEE2E2; color:#B91C1C; padding:8px; border-radius:6px;">ทายว่า FAKE (AI)</div>
+                            <div style="font-weight:bold; background:#F1F5F9; padding:10px; border-radius:6px; display:flex; align-items:center; justify-content:center;">ของจริง (REAL)</div>
+                            <div style="background:#DCFCE7; color:#15803D; font-weight:bold; font-size:1.1rem; padding:10px; border-radius:6px; border:1px solid #86EFAC;">True Real (TN): {tn}</div>
+                            <div style="background:#FEE2E2; color:#B91C1C; font-weight:bold; font-size:1.1rem; padding:10px; border-radius:6px; border:1px solid #FCA5A5;">False Fake (FP): {fp}</div>
+                            <div style="font-weight:bold; background:#F1F5F9; padding:10px; border-radius:6px; display:flex; align-items:center; justify-content:center;">คลิป AI (FAKE)</div>
+                            <div style="background:#FEE2E2; color:#B91C1C; font-weight:bold; font-size:1.1rem; padding:10px; border-radius:6px; border:1px solid #FCA5A5;">False Real (FN): {fn}</div>
+                            <div style="background:#DCFCE7; color:#15803D; font-weight:bold; font-size:1.1rem; padding:10px; border-radius:6px; border:1px solid #86EFAC;">True Fake (TP): {tp}</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
-            # ปุ่ม Download CSV
-            csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
-            st.download_button(
-                label="⬇️ ดาวน์โหลดผลลัพธ์เป็น CSV (predictions.csv)",
-                data=csv_bytes,
-                file_name=f"batch_predictions_{time.strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-            )
+            # 5. ปุ่มดาวน์โหลดผลลัพธ์ (CSV & JSON)
+            st.markdown("##### 📥 ส่งออกข้อมูลผลวิเคราะห์")
+            col_dl1, col_dl2 = st.columns(2)
+            with col_dl1:
+                csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+                st.download_button(
+                    label="⬇️ ดาวน์โหลดรายงานแบบ CSV (predictions.csv)",
+                    data=csv_bytes,
+                    file_name=f"batch_predictions_{time.strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            with col_dl2:
+                json_bytes = json.dumps(df.to_dict(orient="records"), ensure_ascii=False, indent=2).encode("utf-8")
+                st.download_button(
+                    label="⬇️ ดาวน์โหลดรายงานแบบ JSON (predictions.json)",
+                    data=json_bytes,
+                    file_name=f"batch_predictions_{time.strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
