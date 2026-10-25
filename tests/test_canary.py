@@ -15,7 +15,7 @@ def test_baseline_json_exists_and_valid():
 
     assert "threshold" in data
     assert "class_index_fake" in data
-    assert data["class_index_fake"] == 0
+    assert data["class_index_fake"] == 1
     assert "canary_targets" in data
 
 

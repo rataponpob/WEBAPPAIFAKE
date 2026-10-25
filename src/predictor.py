@@ -48,15 +48,15 @@ def predict_video(
     model: Any,
     frames: List[np.ndarray],
     threshold: float = 0.55,
-    class_index_fake: int = 0,
+    class_index_fake: int = 1,
     borderline_band: tuple = (0.45, 0.65),
     preprocessor: Optional[Callable[[np.ndarray], np.ndarray]] = None,
 ) -> PredictionResult:
     """ทำนายวิดีโอจาก list ของ RGB frames
 
     ตรรกะแปลง label (จุดเดียวในทั้งระบบ):
-    - โมเดล sigmoid ทาย index 1 = REAL
-    - ดังนั้นถ้า class_index_fake = 0: prob(fake) = 1.0 - raw_sigmoid
+    - ถ้า class_index_fake = 1: prob(fake) = raw_sigmoid (index 1 = FAKE)
+    - ถ้า class_index_fake = 0: prob(fake) = 1.0 - raw_sigmoid (index 0 = FAKE)
     """
     if not frames:
         raise ValueError("frames ว่างเปล่า — ไม่สามารถทำนายได้")

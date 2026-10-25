@@ -16,7 +16,7 @@ CONFIG = {
     "MODEL_PATH": _resolve_model_path(),
     "MODEL_NAME": "ResNet50",
     "IMG_SIZE": (224, 224),
-    "CLASS_INDEX_FAKE": 0,          # FAKE=0, REAL=1 (จาก image_dataset_from_directory)
+    "CLASS_INDEX_FAKE": 1,          # FAKE=1, REAL=0 (สลับฝั่งตามโมเดล)
     # --- inference (ค่า default ตาม canary ที่ผ่านแล้วในโน้ตบุ๊ก) ---
     "N_FRAMES": 16,
     "VOTE_THRESHOLD": 0.55,
