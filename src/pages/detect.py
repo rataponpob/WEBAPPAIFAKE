@@ -75,6 +75,31 @@ def render_detect_page():
                 set_active_model_path(ch_path)
                 st.rerun()
 
+    # แผงตั้งค่าการตรวจจับ (Inference Settings)
+    with st.expander("⚙️ ตั้งค่าการตรวจจับ (Inference Settings)", expanded=False):
+        c_set1, c_set2 = st.columns(2)
+        with c_set1:
+            cfg_n_frames = st.slider(
+                "จำนวนเฟรมที่สุ่มตรวจ (N_FRAMES):",
+                min_value=4,
+                max_value=100,
+                value=st.session_state.get("cfg_n_frames", CONFIG["N_FRAMES"]),
+                step=2,
+                help="จำนวนเฟรมต่อคลิปที่ตัดมาสุ่มตรวจ ยิ่งมากยิ่งเสถียรแต่ใช้เวลาเพิ่มขึ้น",
+            )
+            st.session_state["cfg_n_frames"] = cfg_n_frames
+        with c_set2:
+            cfg_thresh = st.slider(
+                "เกณฑ์ตัดสิน FAKE (VOTE_THRESHOLD):",
+                min_value=0.00,
+                max_value=1.00,
+                value=st.session_state.get("cfg_vote_threshold", CONFIG["VOTE_THRESHOLD"]),
+                step=0.01,
+                format="%.2f",
+                help="ถ้า prob(FAKE) เฉลี่ย >= ค่านี้ ระบบจะตัดสินว่าเป็น FAKE",
+            )
+            st.session_state["cfg_vote_threshold"] = cfg_thresh
+
     # ตัวอัปโหลดไฟล์
     uploaded_file = st.file_uploader(
         "เลือกหรือลากไฟล์วิดีโอมาวางที่นี่ (รองรับ mp4, mov, avi, webm, mkv)",

@@ -29,31 +29,49 @@ from src.pages.history import render_history_page
 from src.pages.model_info import render_model_info_page
 
 
+PAGES = {
+    "detect": {"label": "🎯 ตรวจจับวิดีโอเดี่ยว", "func": render_detect_page},
+    "batch": {"label": "📦 ตรวจจับแบบกลุ่ม (Batch)", "func": render_batch_page},
+    "history": {"label": "📜 ประวัติการตรวจ (History)", "func": render_history_page},
+    "model": {"label": "⚙️ จัดการโมเดล (Manage)", "func": render_model_info_page},
+}
+
+
 def render_sidebar():
-    st.sidebar.title("🎥 AI Video Detector")
-    st.sidebar.caption("ระบบตรวจจับวิดีโอสร้างโดย AI ด้วย ResNet50")
+    st.sidebar.markdown(
+        """
+        <div style="padding: 2px 0 10px 0;">
+            <h2 style="margin: 0; font-size: 1.3rem; color: #1E293B; font-weight: 700;">🎥 AI Video Detector</h2>
+            <p style="margin: 2px 0 0 0; font-size: 0.78rem; color: #64748B;">ResNet50 AI vs Real Classifier</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.sidebar.markdown("---")
 
-    # 1. เมนูหลัก (Navigation) - วางไว้บนสุด เด่นชัด ใช้งานสะดวก
-    st.sidebar.subheader("🧭 เมนูหลัก (Navigation)")
-    pages = {
-        "🎯 ตรวจจับวิดีโอเดี่ยว": render_detect_page,
-        "📦 ตรวจจับแบบกลุ่ม (Batch)": render_batch_page,
-        "📜 ประวัติการตรวจ (History)": render_history_page,
-        "ℹ️ ข้อมูลโมเดล (Model Info)": render_model_info_page,
-    }
+    # 1. แถบนำทาง (Navbar) สไตล์โมเดิร์น (ไม่ใช่ Option Radio)
+    st.sidebar.markdown("<p style='font-size: 0.76rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;'>🧭 เมนูหลัก (NAVBAR)</p>", unsafe_allow_html=True)
 
-    selected_page_name = st.sidebar.radio(
-        "เลือกหน้าเมนู:",
-        options=list(pages.keys()),
-        index=0,
-        label_visibility="collapsed",
-    )
+    if "current_page_key" not in st.session_state:
+        st.session_state["current_page_key"] = "detect"
+
+    for key, pinfo in PAGES.items():
+        is_current = (st.session_state["current_page_key"] == key)
+        btn_type = "primary" if is_current else "secondary"
+        if st.sidebar.button(
+            pinfo["label"],
+            key=f"nav_btn_{key}",
+            type=btn_type,
+            use_container_width=True,
+        ):
+            if st.session_state["current_page_key"] != key:
+                st.session_state["current_page_key"] = key
+                st.rerun()
 
     st.sidebar.markdown("---")
 
     # 2. สถานะและการเลือกโมเดล (GitHub Release)
-    st.sidebar.subheader("🤖 สถานะโมเดล (GitHub Release)")
+    st.sidebar.markdown("<p style='font-size: 0.76rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;'>🤖 สถานะโมเดล</p>", unsafe_allow_html=True)
 
     available_models = get_available_models()
     active_model_path = get_active_model_path()
@@ -69,6 +87,7 @@ def render_sidebar():
             "โมเดลที่เลือกใช้งาน:",
             options=model_names,
             index=cur_idx,
+            label_visibility="collapsed",
             help="สามารถเลือกสลับโมเดลที่ติดตั้งไว้แล้วในระบบได้ทันที",
         )
         selected_path = next(
@@ -123,37 +142,11 @@ def render_sidebar():
             else:
                 st.sidebar.warning("กรุณาระบุ URL ก่อนเริ่มดาวน์โหลด")
 
-    # 3. การตั้งค่าการประมวลผล (Inference Settings)
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("⚙️ การตั้งค่า (Settings)")
-
-    n_frames = st.sidebar.slider(
-        "จำนวนเฟรมที่สุ่มตรวจ (N_FRAMES):",
-        min_value=4,
-        max_value=100,
-        value=st.session_state.get("cfg_n_frames", CONFIG["N_FRAMES"]),
-        step=2,
-        help="จำนวนเฟรมต่อคลิปที่ตัดมาสุ่มตรวจ ยิ่งมากยิ่งเสถียรแต่ใช้เวลาเพิ่มขึ้น (ปรับได้สูงสุด 100 เฟรม)",
-    )
-    st.session_state["cfg_n_frames"] = n_frames
-
-    threshold = st.sidebar.slider(
-        "เกณฑ์ตัดสิน FAKE (VOTE_THRESHOLD):",
-        min_value=0.00,
-        max_value=1.00,
-        value=st.session_state.get(
-            "cfg_vote_threshold", CONFIG["VOTE_THRESHOLD"]
-        ),
-        step=0.01,
-        format="%.2f",
-        help="ถ้า prob(FAKE) เฉลี่ย >= ค่านี้ ระบบจะตัดสินว่าเป็น FAKE (ปรับได้ตั้งแต่ 0.00 ถึง 1.00)",
-    )
-    st.session_state["cfg_vote_threshold"] = threshold
-
     st.sidebar.markdown("---")
     st.sidebar.caption("AI vs Real Video Detector v1.0 • Antigravity")
 
-    return pages[selected_page_name]
+    current_key = st.session_state.get("current_page_key", "detect")
+    return PAGES.get(current_key, PAGES["detect"])["func"]
 
 
 def inject_compact_styles():
@@ -171,36 +164,39 @@ def inject_compact_styles():
             margin: 0 auto !important;
         }
 
-        /* ปรับแต่ง Sidebar Navigation ให้ดูเป็นปุ่มเมนูสวยงาม */
-        [data-testid="stSidebar"] [data-testid="stRadio"] > div {
-            gap: 4px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stRadio"] label {
-            background: #FFFFFF !important;
-            border: 1px solid #E2E8F0 !important;
-            border-radius: 8px !important;
-            padding: 8px 12px !important;
-            margin-bottom: 2px !important;
-            transition: all 0.18s ease-in-out !important;
-            cursor: pointer !important;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-            border-color: #3B82F6 !important;
-            background: #F0F7FF !important;
-            transform: translateX(3px) !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
-            background: #2563EB !important;
-            border-color: #1D4ED8 !important;
-            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25) !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p {
+        /* ตกแต่ง Sidebar Navbar Buttons ให้ดูพรีเมียม สไตล์แท็บโมเดิร์น */
+        [data-testid="stSidebar"] button[kind="primary"] {
+            background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
             color: #FFFFFF !important;
+            border: none !important;
             font-weight: 600 !important;
+            box-shadow: 0 3px 8px rgba(37, 99, 235, 0.28) !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+            padding: 0.55rem 0.95rem !important;
+            border-radius: 8px !important;
+            font-size: 0.88rem !important;
         }
-        [data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
-            display: none !important;
+
+        [data-testid="stSidebar"] button[kind="secondary"] {
+            background: #FFFFFF !important;
+            color: #334155 !important;
+            border: 1px solid #E2E8F0 !important;
+            font-weight: 500 !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+            padding: 0.55rem 0.95rem !important;
+            border-radius: 8px !important;
+            font-size: 0.88rem !important;
+            transition: all 0.18s ease-in-out !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+        }
+
+        [data-testid="stSidebar"] button[kind="secondary"]:hover {
+            border-color: #3B82F6 !important;
+            color: #2563EB !important;
+            background: #EFF6FF !important;
+            transform: translateX(3px) !important;
         }
 
         /* ปรับขนาดหัวข้อและข้อความ */
@@ -278,3 +274,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
