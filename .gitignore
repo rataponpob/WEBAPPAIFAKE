@@ -38,8 +38,8 @@ htmlcov/
 # Streamlit
 .streamlit/secrets.toml
 
-# Large Model Weights (Keep README.md)
-*.keras
+# Large Model Weights (Tracked via Git LFS)
+!models/*.keras
 *.h5
 *.pt
 *.pth
