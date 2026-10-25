@@ -8,12 +8,11 @@ import streamlit as st
 from src.config import CONFIG
 from src.frame_extractor import extract_frames, extract_frames_dual
 from src.model_loader import (
-    delete_model,
+    download_model_from_url,
     get_active_model_path,
     get_available_models,
     is_model_available,
     load_model,
-    save_uploaded_model,
     set_active_model_path,
 )
 from src.predictor import PredictionResult, predict_video
@@ -52,50 +51,32 @@ def render_detect_page():
         else:
             st.markdown(
                 f"<div style='background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:6px 12px;font-size:0.86rem;color:#dc2626;margin-bottom:8px;'>"
-                f"⚠️ ยังไม่พบไฟล์โมเดล <code>{model_path.name}</code> กรุณากดปุ่ม <b>📁 จัดการโมเดล</b> เพื่ออัปโหลด</div>",
+                f"⚠️ ยังไม่พบไฟล์โมเดลในระบบ กรุณากดดาวน์โหลดโมเดลจาก GitHub Release</div>",
                 unsafe_allow_html=True,
             )
 
     with col_model_ctrl:
-        with st.popover("📁 สลับ / อัปโหลด / ลบโมเดล", use_container_width=True):
-            st.markdown("##### 📁 จัดการโมเดลที่ใช้ตรวจ")
-
-            if available_models:
-                m_names = [m.name for m in available_models]
-                cur_idx = m_names.index(model_path.name) if model_path.name in m_names else 0
-                chosen = st.selectbox("เลือกโมเดล:", options=m_names, index=cur_idx, key="detect_model_select")
-                ch_path = next((m for m in available_models if m.name == chosen), model_path)
-                if ch_path != model_path:
-                    set_active_model_path(ch_path)
-                    st.rerun()
-
-            st.markdown("---")
-            st.markdown("**📤 อัปโหลดโมเดลใหม่**")
-            up_m = st.file_uploader("เลือกไฟล์ .keras หรือ .h5", type=["keras", "h5"], key="detect_model_up")
-            if up_m is not None:
-                if st.button("บันทึกและสลับมาใช้โมเดลนี้", key="detect_save_m", type="primary", use_container_width=True):
-                    with st.spinner("กำลังตรวจสอบและโหลดโมเดล..."):
-                        ok, msg, _ = save_uploaded_model(up_m)
-                        if ok:
-                            st.success(msg)
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error(msg)
-
-            if available_models:
-                st.markdown("---")
-                st.markdown(f"**🗑️ ลบโมเดล `{model_path.name}`**")
-                with st.popover(f"ยืนยันการลบโมเดลนี้", use_container_width=True):
-                    st.write(f"ต้องการลบ `{model_path.name}` จริงหรือไม่?")
-                    if st.button("ลบโมเดลทันที", type="primary", key="del_m_detect", use_container_width=True):
-                        ok, msg = delete_model(model_path)
-                        if ok:
-                            st.success(msg)
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error(msg)
+        if not model_ready:
+            default_url = CONFIG.get("DEFAULT_MODEL_URL", "")
+            if st.button("📥 โหลดโมเดล GitHub Release", type="primary", use_container_width=True, key="btn_detect_dl_model"):
+                pbar = st.progress(0, text="กำลังเตรียมดาวน์โหลด...")
+                s_txt = st.empty()
+                with st.spinner("กำลังดาวน์โหลดโมเดล..."):
+                    ok, msg = download_model_from_url(default_url, progress_bar=pbar, status_text=s_txt)
+                    if ok:
+                        st.success(msg)
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+        elif len(available_models) > 1:
+            m_names = [m.name for m in available_models]
+            cur_idx = m_names.index(model_path.name) if model_path.name in m_names else 0
+            chosen = st.selectbox("สลับโมเดล:", options=m_names, index=cur_idx, key="detect_model_select")
+            ch_path = next((m for m in available_models if m.name == chosen), model_path)
+            if ch_path != model_path:
+                set_active_model_path(ch_path)
+                st.rerun()
 
     # ตัวอัปโหลดไฟล์
     uploaded_file = st.file_uploader(
@@ -361,13 +342,7 @@ def render_detect_page():
             st.divider()
             render_frame_gallery(frames, res.frame_probs, threshold=res.threshold)
 
-            # 4. ข้อพึงระวัง
-            st.warning(
-                "⚠️ **ข้อพึงระวัง:** โมเดลมีความแม่นยำบนวิดีโอ unseen ประมาณ 63.7% "
-                "การตรวจใช้ Soft-voting เฉลี่ยรายเฟรม ให้ใช้เพื่อคัดกรองเบื้องต้นเท่านั้น"
-            )
-
-            # 5. ปุ่มดาวน์โหลดรายงาน JSON
+            # 4. ปุ่มดาวน์โหลดรายงาน JSON
             report_data = {
                 "filename": saved["filename"],
                 "analysis_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),

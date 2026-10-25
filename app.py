@@ -17,12 +17,10 @@ st.set_page_config(
 
 from src.config import CONFIG
 from src.model_loader import (
-    delete_model,
     download_model_from_url,
     get_active_model_path,
     get_available_models,
     is_model_available,
-    save_uploaded_model,
     set_active_model_path,
 )
 from src.pages.batch import render_batch_page
@@ -35,9 +33,9 @@ def render_sidebar():
     st.sidebar.title("🎥 AI Video Detector")
     st.sidebar.caption("ระบบตรวจจับวิดีโอสร้างโดย AI ด้วย ResNet50")
 
-    # 1. สถานะและการเลือกโมเดล
+    # 1. สถานะและการเลือกโมเดล (GitHub Release)
     st.sidebar.markdown("---")
-    st.sidebar.subheader("🤖 สถานะ & จัดการโมเดล")
+    st.sidebar.subheader("🤖 สถานะโมเดล (GitHub Release)")
 
     available_models = get_available_models()
     active_model_path = get_active_model_path()
@@ -53,7 +51,7 @@ def render_sidebar():
             "โมเดลที่เลือกใช้งาน:",
             options=model_names,
             index=cur_idx,
-            help="สามารถเลือกสลับโมเดลที่ต้องการใช้งานได้ทันที",
+            help="สามารถเลือกสลับโมเดลที่ติดตั้งไว้แล้วในระบบได้ทันที",
         )
         selected_path = next(
             (m for m in available_models if m.name == selected_name),
@@ -65,11 +63,11 @@ def render_sidebar():
 
         st.sidebar.success(f"🟢 พร้อมใช้งาน (`{active_model_path.name}`)")
     else:
-        st.sidebar.error("🔴 ยังไม่พบไฟล์โมเดลในระบบ")
+        st.sidebar.error("🔴 ยังไม่พบไฟล์โมเดลในเซิร์ฟเวอร์")
         default_dl_url = CONFIG.get("DEFAULT_MODEL_URL", "")
         if default_dl_url:
-            st.sidebar.info("💡 สามารถกดดาวน์โหลดโมเดลอัตโนมัติจาก GitHub Release ได้ทันที")
-            if st.sidebar.button("📥 ดาวน์โหลดโมเดลอัตโนมัติ (1 คลิก)", type="primary", use_container_width=True, key="btn_auto_dl_sidebar"):
+            st.sidebar.info("💡 สามารถกดดาวน์โหลดโมเดลจาก GitHub Release ได้ทันที")
+            if st.sidebar.button("📥 ดาวน์โหลดโมเดลจาก GitHub Release", type="primary", use_container_width=True, key="btn_auto_dl_sidebar"):
                 pbar = st.sidebar.progress(0, text="กำลังเตรียมการดาวน์โหลด...")
                 st_status = st.sidebar.empty()
                 ok, msg = download_model_from_url(default_dl_url, progress_bar=pbar, status_text=st_status)
@@ -81,17 +79,17 @@ def render_sidebar():
                 else:
                     st.sidebar.error(msg)
 
-    # ตัวเลือกเพิ่ม/ลบ/อัปโหลด/ดาวน์โหลดโมเดลตรง Sidebar
-    with st.sidebar.expander("📁 จัดการ / ดาวน์โหลด / อัปโหลดโมเดล", expanded=not available_models):
-        st.markdown("**🌐 ดาวน์โหลดโมเดลจาก URL**")
+    # ตัวเลือกดาวน์โหลดโมเดลจาก GitHub Release
+    with st.sidebar.expander("📦 ติดตั้งโมเดลจาก GitHub Release", expanded=not available_models):
+        st.caption("ดาวน์โหลดโมเดล (.keras) จาก GitHub Release Asset URL")
         input_url = st.text_input(
-            "ระบุ URL โมเดล (.keras / Google Drive):",
+            "GitHub Release URL:",
             value=CONFIG.get("DEFAULT_MODEL_URL", "") if not available_models else "",
-            placeholder="https://.../ResNet50.keras",
+            placeholder="https://github.com/.../releases/download/.../model.keras",
             key="input_model_url",
-            help="รองรับทั้ง Direct URL, GitHub Releases และ Google Drive Sharing Link",
+            help="ระบุ URL ของไฟล์โมเดล .keras จาก GitHub Release",
         )
-        if st.button("📥 เริ่มดาวน์โหลดจาก URL", key="btn_start_dl_url", use_container_width=True):
+        if st.button("📥 ดาวน์โหลดและติดตั้งโมเดล", key="btn_start_dl_url", use_container_width=True):
             if input_url.strip():
                 pbar2 = st.progress(0, text="กำลังเตรียมการดาวน์โหลด...")
                 st_stat2 = st.empty()
@@ -106,42 +104,6 @@ def render_sidebar():
                         st.sidebar.error(msg)
             else:
                 st.sidebar.warning("กรุณาระบุ URL ก่อนเริ่มดาวน์โหลด")
-
-        st.markdown("---")
-        st.markdown("**📤 หรืออัปโหลดไฟล์จากเครื่อง**")
-        uploaded_model_file = st.file_uploader(
-            "เลือกไฟล์ .keras หรือ .h5",
-            type=["keras", "h5"],
-            key="sb_model_uploader",
-            help="ระบบจะตรวจสอบและสลับมาใช้โมเดลนี้ทันที",
-        )
-        if uploaded_model_file is not None:
-            if st.button("ยืนยันบันทึกโมเดล", key="btn_save_sb_model", type="primary", use_container_width=True):
-                with st.spinner("กำลังบันทึกและตรวจสอบโมเดล..."):
-                    ok, msg, info = save_uploaded_model(uploaded_model_file)
-                    if ok:
-                        st.sidebar.success(msg)
-                        time_module = __import__("time")
-                        time_module.sleep(1)
-                        st.rerun()
-                    else:
-                        st.sidebar.error(msg)
-
-        if available_models:
-            st.markdown("---")
-            st.markdown("**🗑️ ลบโมเดลที่เลือก**")
-            with st.popover(f"ลบ `{active_model_path.name}`", use_container_width=True):
-                st.write(f"ยืนยันที่จะลบไฟล์โมเดล `{active_model_path.name}` หรือไม่?")
-                st.caption("⚠️ เมื่อลบแล้วจะไม่สามารถกู้คืนได้")
-                if st.button("ยืนยันการลบ", type="primary", key="sb_btn_del_model", use_container_width=True):
-                    ok, msg = delete_model(active_model_path)
-                    if ok:
-                        st.sidebar.success(msg)
-                        time_module = __import__("time")
-                        time_module.sleep(1)
-                        st.rerun()
-                    else:
-                        st.sidebar.error(msg)
 
     # 2. การตั้งค่าการประมวลผล (Inference Settings)
     st.sidebar.markdown("---")
@@ -169,14 +131,6 @@ def render_sidebar():
         help="ถ้า prob(FAKE) เฉลี่ย >= ค่านี้ ระบบจะตัดสินว่าเป็น FAKE (ปรับได้ตั้งแต่ 0.00 ถึง 1.00)",
     )
     st.session_state["cfg_vote_threshold"] = threshold
-
-    # 3. คำเตือน & หมายเหตุ
-    st.sidebar.markdown("---")
-    st.sidebar.info(
-        "ℹ️ **หมายเหตุความแม่นยำ:**\n"
-        "โมเดลมีความแม่นยำบนวิดีโอ unseen ประมาณ **63.7%** "
-        "โปรดดูรายละเอียดในหน้า 'ข้อมูลโมเดล'"
-    )
 
 
 def inject_compact_styles():
