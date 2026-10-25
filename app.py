@@ -40,9 +40,8 @@ PAGES = {
 def render_sidebar():
     st.sidebar.markdown(
         """
-        <div style="padding: 2px 0 10px 0;">
+        <div style="padding: 2px 0 6px 0;">
             <h2 style="margin: 0; font-size: 1.3rem; color: #1E293B; font-weight: 700;">🎥 AI Video Detector</h2>
-            <p style="margin: 2px 0 0 0; font-size: 0.78rem; color: #64748B;">ResNet50 AI vs Real Classifier</p>
         </div>
         """,
         unsafe_allow_html=True,

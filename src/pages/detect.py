@@ -26,8 +26,8 @@ from src.visuals import (
 
 
 def render_detect_page():
-    st.header("🎯 ตรวจสอบวิดีโอเดี่ยว (Single Video Detection)")
-    st.caption("อัปโหลดไฟล์วิดีโอเพื่อวิเคราะห์ตรวจจับ AI vs Real ด้วยโมเดล ResNet50")
+    st.header("🎯 ตรวจสอบวิดีโอเดี่ยว")
+    st.caption("อัปโหลดไฟล์วิดีโอเพื่อวิเคราะห์ตรวจจับ AI vs Real")
 
     # ตรวจสอบและจัดการโมเดลในหน้านี้โดยตรง
     available_models = get_available_models()
