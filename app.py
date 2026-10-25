@@ -32,9 +32,27 @@ from src.pages.model_info import render_model_info_page
 def render_sidebar():
     st.sidebar.title("🎥 AI Video Detector")
     st.sidebar.caption("ระบบตรวจจับวิดีโอสร้างโดย AI ด้วย ResNet50")
-
-    # 1. สถานะและการเลือกโมเดล (GitHub Release)
     st.sidebar.markdown("---")
+
+    # 1. เมนูหลัก (Navigation) - วางไว้บนสุด เด่นชัด ใช้งานสะดวก
+    st.sidebar.subheader("🧭 เมนูหลัก (Navigation)")
+    pages = {
+        "🎯 ตรวจจับวิดีโอเดี่ยว": render_detect_page,
+        "📦 ตรวจจับแบบกลุ่ม (Batch)": render_batch_page,
+        "📜 ประวัติการตรวจ (History)": render_history_page,
+        "ℹ️ ข้อมูลโมเดล (Model Info)": render_model_info_page,
+    }
+
+    selected_page_name = st.sidebar.radio(
+        "เลือกหน้าเมนู:",
+        options=list(pages.keys()),
+        index=0,
+        label_visibility="collapsed",
+    )
+
+    st.sidebar.markdown("---")
+
+    # 2. สถานะและการเลือกโมเดล (GitHub Release)
     st.sidebar.subheader("🤖 สถานะโมเดล (GitHub Release)")
 
     available_models = get_available_models()
@@ -105,7 +123,7 @@ def render_sidebar():
             else:
                 st.sidebar.warning("กรุณาระบุ URL ก่อนเริ่มดาวน์โหลด")
 
-    # 2. การตั้งค่าการประมวลผล (Inference Settings)
+    # 3. การตั้งค่าการประมวลผล (Inference Settings)
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚙️ การตั้งค่า (Settings)")
 
@@ -132,6 +150,11 @@ def render_sidebar():
     )
     st.session_state["cfg_vote_threshold"] = threshold
 
+    st.sidebar.markdown("---")
+    st.sidebar.caption("AI vs Real Video Detector v1.0 • Antigravity")
+
+    return pages[selected_page_name]
+
 
 def inject_compact_styles():
     """ปรับแต่ง CSS ให้ UI มีขนาดกะทัดรัด พอดีสายตา ไม่ใหญ่เทอะทะ"""
@@ -146,6 +169,38 @@ def inject_compact_styles():
             padding-left: 1.5rem !important;
             padding-right: 1.5rem !important;
             margin: 0 auto !important;
+        }
+
+        /* ปรับแต่ง Sidebar Navigation ให้ดูเป็นปุ่มเมนูสวยงาม */
+        [data-testid="stSidebar"] [data-testid="stRadio"] > div {
+            gap: 4px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"] label {
+            background: #FFFFFF !important;
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 8px !important;
+            padding: 8px 12px !important;
+            margin-bottom: 2px !important;
+            transition: all 0.18s ease-in-out !important;
+            cursor: pointer !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+            border-color: #3B82F6 !important;
+            background: #F0F7FF !important;
+            transform: translateX(3px) !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+            background: #2563EB !important;
+            border-color: #1D4ED8 !important;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25) !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p {
+            color: #FFFFFF !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
+            display: none !important;
         }
 
         /* ปรับขนาดหัวข้อและข้อความ */
@@ -217,28 +272,7 @@ def inject_compact_styles():
 
 def main():
     inject_compact_styles()
-    render_sidebar()
-
-    # ระบบ Navigation
-    pages = {
-        "🎯 ตรวจจับวิดีโอเดี่ยว": render_detect_page,
-        "📦 ตรวจจับแบบกลุ่ม (Batch)": render_batch_page,
-        "📜 ประวัติการตรวจ (History)": render_history_page,
-        "ℹ️ ข้อมูลโมเดล & จัดการโมเดล": render_model_info_page,
-    }
-
-    page_names = list(pages.keys())
-    selected_page_name = st.sidebar.radio(
-        "เมนูหลัก:",
-        page_names,
-        index=0,
-    )
-
-    st.sidebar.markdown("---")
-    st.sidebar.caption("AI vs Real Video Detector v1.0 • Antigravity")
-
-    # เรียกหน้าตามที่เลือก
-    page_func = pages[selected_page_name]
+    page_func = render_sidebar()
     page_func()
 
 
