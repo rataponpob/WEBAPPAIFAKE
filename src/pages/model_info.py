@@ -16,7 +16,7 @@ from src.model_loader import (
 
 def render_model_info_page():
     st.header("⚙️ จัดการโมเดล (Model Management)")
-    st.caption("ตรวจสอบ สลับใช้งาน และติดตั้งโมเดล ResNet50 จาก GitHub Release")
+    st.caption("ตรวจสอบ สลับใช้งาน และติดตั้งโมเดลจาก GitHub Release")
 
     active_model_path = get_active_model_path()
     available_models = get_available_models()

@@ -32,6 +32,7 @@ def render_detect_page():
     # ตรวจสอบและจัดการโมเดลในหน้านี้โดยตรง
     available_models = get_available_models()
     model_path = get_active_model_path()
+    model_display_name = model_path.stem if model_path else "AI Model"
     model_ready = is_model_available(model_path)
 
     col_model_status, col_model_ctrl = st.columns([3, 1])
@@ -165,7 +166,7 @@ def render_detect_page():
                         temp_path = tmp.name
 
                     # ขั้นตอนที่ 2: โหลดโมเดล
-                    status.update(label="2/4 🧠 กำลังโหลดโมเดล ResNet50...")
+                    status.update(label=f"2/4 🧠 กำลังโหลดโมเดล {model_display_name}...")
                     model = load_model(model_path)
 
                     # ขั้นตอนที่ 3: สุ่มตัดเฟรม uniform sampling
@@ -192,7 +193,7 @@ def render_detect_page():
 
                     # ขั้นตอนที่ 4: Predict (batch เดียว)
                     status.update(
-                        label=f"4/4 ⚡ กำลังทำนายด้วย ResNet50 ({len(model_frames)} เฟรม)..."
+                        label=f"4/4 ⚡ กำลังทำนายด้วย {model_display_name} ({len(model_frames)} เฟรม)..."
                     )
                     result = predict_video(
                         model=model,
@@ -237,6 +238,8 @@ def render_detect_page():
                     "elapsed": elapsed,
                     "sampled_clip_bytes": sampled_clip_bytes,
                     "raw_video_bytes": uploaded_file.getvalue(),
+                    "model_name": model_display_name,
+                    "n_frames": len(model_frames),
                 }
 
                 # เพิ่มลง History
@@ -247,6 +250,7 @@ def render_detect_page():
                     {
                         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                         "filename": uploaded_file.name,
+                        "model_name": model_display_name,
                         "verdict": result.label.upper(),
                         "mean_prob_fake": result.mean_prob_fake,
                         "confidence": result.confidence_level,
@@ -294,7 +298,9 @@ def render_detect_page():
                 with tab_vid_sampled:
                     if saved.get("sampled_clip_bytes"):
                         st.video(saved["sampled_clip_bytes"])
-                        st.caption("ℹ️ แสดง 16 เฟรมที่ผ่าน ResNet50 พร้อมป้ายระบุ FAKE/REAL รายเฟรม")
+                        used_model = saved.get("model_name", model_display_name)
+                        n_used = len(saved["result"].frame_probs) if saved.get("result") else n_frames
+                        st.caption(f"ℹ️ แสดง {n_used} เฟรมที่ผ่าน {used_model} พร้อมป้ายระบุ FAKE/REAL รายเฟรม")
                         st.download_button(
                             label="⬇️ ดาวน์โหลดวิดีโอเฟรมสุ่ม (MP4)",
                             data=saved["sampled_clip_bytes"],
