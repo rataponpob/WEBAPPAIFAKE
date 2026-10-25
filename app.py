@@ -18,6 +18,7 @@ st.set_page_config(
 from src.config import CONFIG
 from src.model_loader import (
     delete_model,
+    download_model_from_url,
     get_active_model_path,
     get_available_models,
     is_model_available,
@@ -64,12 +65,50 @@ def render_sidebar():
 
         st.sidebar.success(f"🟢 พร้อมใช้งาน (`{active_model_path.name}`)")
     else:
-        st.sidebar.error("🔴 ยังไม่พบไฟล์โมเดล")
-        st.sidebar.caption("ต้องการไฟล์ `.keras` หรือ `.h5` ใน `models/`")
+        st.sidebar.error("🔴 ยังไม่พบไฟล์โมเดลในระบบ")
+        default_dl_url = CONFIG.get("DEFAULT_MODEL_URL", "")
+        if default_dl_url:
+            st.sidebar.info("💡 สามารถกดดาวน์โหลดโมเดลอัตโนมัติจาก GitHub Release ได้ทันที")
+            if st.sidebar.button("📥 ดาวน์โหลดโมเดลอัตโนมัติ (1 คลิก)", type="primary", use_container_width=True, key="btn_auto_dl_sidebar"):
+                pbar = st.sidebar.progress(0, text="กำลังเตรียมการดาวน์โหลด...")
+                st_status = st.sidebar.empty()
+                ok, msg = download_model_from_url(default_dl_url, progress_bar=pbar, status_text=st_status)
+                if ok:
+                    st.sidebar.success(msg)
+                    time_mod = __import__("time")
+                    time_mod.sleep(1)
+                    st.rerun()
+                else:
+                    st.sidebar.error(msg)
 
-    # ตัวเลือกเพิ่ม/ลบ/อัปโหลดโมเดลตรง Sidebar
-    with st.sidebar.expander("📁 อัปโหลด / ลบโมเดล", expanded=not available_models):
-        st.markdown("**📤 อัปโหลดโมเดลใหม่**")
+    # ตัวเลือกเพิ่ม/ลบ/อัปโหลด/ดาวน์โหลดโมเดลตรง Sidebar
+    with st.sidebar.expander("📁 จัดการ / ดาวน์โหลด / อัปโหลดโมเดล", expanded=not available_models):
+        st.markdown("**🌐 ดาวน์โหลดโมเดลจาก URL**")
+        input_url = st.text_input(
+            "ระบุ URL โมเดล (.keras / Google Drive):",
+            value=CONFIG.get("DEFAULT_MODEL_URL", "") if not available_models else "",
+            placeholder="https://.../ResNet50.keras",
+            key="input_model_url",
+            help="รองรับทั้ง Direct URL, GitHub Releases และ Google Drive Sharing Link",
+        )
+        if st.button("📥 เริ่มดาวน์โหลดจาก URL", key="btn_start_dl_url", use_container_width=True):
+            if input_url.strip():
+                pbar2 = st.progress(0, text="กำลังเตรียมการดาวน์โหลด...")
+                st_stat2 = st.empty()
+                with st.spinner("กำลังดาวน์โหลดและตรวจสอบโครงสร้างโมเดล..."):
+                    ok, msg = download_model_from_url(input_url.strip(), progress_bar=pbar2, status_text=st_stat2)
+                    if ok:
+                        st.sidebar.success(msg)
+                        time_mod = __import__("time")
+                        time_mod.sleep(1)
+                        st.rerun()
+                    else:
+                        st.sidebar.error(msg)
+            else:
+                st.sidebar.warning("กรุณาระบุ URL ก่อนเริ่มดาวน์โหลด")
+
+        st.markdown("---")
+        st.markdown("**📤 หรืออัปโหลดไฟล์จากเครื่อง**")
         uploaded_model_file = st.file_uploader(
             "เลือกไฟล์ .keras หรือ .h5",
             type=["keras", "h5"],

@@ -24,6 +24,7 @@ CONFIG = {
     "MAX_UPLOAD_MB": 500,
     "BORDERLINE_BAND": (0.45, 0.65),  # ช่วงที่ถือว่าผลไม่ชัด
     "CANARY_DIR": PROJECT_ROOT / "assets" / "canary",
+    "DEFAULT_MODEL_URL": "https://github.com/rataponpob/WEBAPPAIFAKE/releases/download/v1.0.0/ResNet50_4dataset.keras",
 }
 
 MODEL_REGISTRY = {

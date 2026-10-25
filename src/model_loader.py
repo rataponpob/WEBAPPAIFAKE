@@ -151,3 +151,82 @@ def delete_model(model_path: Union[str, Path]) -> Tuple[bool, str]:
         return True, f"🗑️ ลบไฟล์โมเดล `{p.name}` เรียบร้อยแล้ว"
     except Exception as e:
         return False, f"ไม่สามารถลบไฟล์โมเดลได้: {e}"
+
+
+def download_model_from_url(
+    url: str,
+    dest_path: Optional[Union[str, Path]] = None,
+    progress_bar: Any = None,
+    status_text: Any = None,
+) -> Tuple[bool, str]:
+    """ดาวน์โหลดโมเดลจาก URL (รองรับ GitHub Releases, Direct Link, Google Drive) พร้อม Progress bar และตรวจสอบความถูกต้อง"""
+    import re
+    import urllib.request
+
+    models_dir = PROJECT_ROOT / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    # แปลงลิงก์ Google Drive ให้อยู่ในรูป direct download
+    gdrive_match = re.search(r"drive\.google\.com/file/d/([a-zA-Z0-9_-]+)", url)
+    if gdrive_match:
+        file_id = gdrive_match.group(1)
+        url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&authuser=0"
+
+    if dest_path is None:
+        clean_name = url.split("?")[0].split("/")[-1]
+        if not (clean_name.endswith(".keras") or clean_name.endswith(".h5")):
+            clean_name = "ResNet50_4dataset.keras"
+        dest_path = models_dir / clean_name
+    else:
+        dest_path = Path(dest_path)
+
+    temp_path = dest_path.with_suffix(dest_path.suffix + ".downloading")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req) as resp, open(temp_path, "wb") as f_out:
+            total_size = int(resp.headers.get("content-length", 0))
+            downloaded = 0
+            chunk_size = 1024 * 512  # 512 KB
+
+            while True:
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    break
+                f_out.write(chunk)
+                downloaded += len(chunk)
+
+                if total_size > 0:
+                    pct = min(1.0, downloaded / total_size)
+                    mb_cur = downloaded / (1024 * 1024)
+                    mb_tot = total_size / (1024 * 1024)
+                    if progress_bar is not None:
+                        progress_bar.progress(pct, text=f"📥 กำลังดาวน์โหลด: {mb_cur:.1f} MB / {mb_tot:.1f} MB ({int(pct*100)}%)")
+                    elif status_text is not None:
+                        status_text.text(f"📥 กำลังดาวน์โหลด: {mb_cur:.1f} MB / {mb_tot:.1f} MB ({int(pct*100)}%)")
+
+        if status_text is not None:
+            status_text.text("🔍 กำลังตรวจสอบโครงสร้างไฟล์โมเดลด้วย TensorFlow...")
+
+        # ทดสอบโหลดด้วย TensorFlow เพื่อตรวจสอบความสมบูรณ์
+        tf.keras.models.load_model(str(temp_path))
+
+        if dest_path.exists():
+            dest_path.unlink()
+        temp_path.rename(dest_path)
+
+        set_active_model_path(dest_path)
+        return True, f"✅ ดาวน์โหลดและติดตั้งโมเดล `{dest_path.name}` สำเร็จ พร้อมใช้งาน!"
+
+    except Exception as err:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+        return False, f"❌ การดาวน์โหลดโมเดลล้มเหลว: {err}"
+
